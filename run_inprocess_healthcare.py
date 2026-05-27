@@ -1,9 +1,16 @@
+"""In-process run of the Healthcare Concierge (notebook 8.4 pattern).
+
+Bypasses A2A server. Middleware sees ALL nested events (ConditionalRequirement,
+ChatModel, ThinkTool, HandoffTool, A2AAgent sub-calls).
+
+Sub-agent servers must be running (policy/research/provider).
+"""
+
 import asyncio
 import os
 from typing import Any
 
 from beeai_framework.adapters.a2a.agents import A2AAgent
-from beeai_framework.adapters.a2a.serve.server import A2AServer, A2AServerConfig
 from beeai_framework.adapters.gemini import GeminiChatModel  # noqa: F401
 from beeai_framework.adapters.vertexai import VertexAIChatModel
 from beeai_framework.agents.requirement import RequirementAgent
@@ -12,7 +19,6 @@ from beeai_framework.agents.requirement.requirements.conditional import (
 )
 from beeai_framework.memory import UnconstrainedMemory
 from beeai_framework.middleware.trajectory import EventMeta, GlobalTrajectoryMiddleware
-from beeai_framework.serve.utils import LRUMemoryManager
 from beeai_framework.tools import Tool
 from beeai_framework.tools.handoff import HandoffTool
 from beeai_framework.tools.think import ThinkTool
@@ -20,7 +26,6 @@ from beeai_framework.tools.think import ThinkTool
 from helpers import setup_env
 
 
-# Log only tool calls
 class ConciseGlobalTrajectoryMiddleware(GlobalTrajectoryMiddleware):
     def _format_prefix(self, meta: EventMeta) -> str:
         prefix = super()._format_prefix(meta)
@@ -30,36 +35,30 @@ class ConciseGlobalTrajectoryMiddleware(GlobalTrajectoryMiddleware):
         return ""
 
 
-def main() -> None:
-    print("Running A2A Orchestrator Agent")
+async def main() -> None:
     setup_env()
 
     host = os.getenv("AGENT_HOST")
     policy_agent_port = os.getenv("POLICY_AGENT_PORT")
     research_agent_port = os.getenv("RESEARCH_AGENT_PORT")
     provider_agent_port = os.getenv("PROVIDER_AGENT_PORT")
-    healthcare_agent_port = int(os.getenv("HEALTHCARE_AGENT_PORT"))
-
-    # Log only tool calls
-    GlobalTrajectoryMiddleware(target=[Tool])
 
     policy_agent = A2AAgent(
         url=f"http://{host}:{policy_agent_port}", memory=UnconstrainedMemory()
     )
-    # Run `check_agent_exists()` to fetch and populate AgentCard
-    asyncio.run(policy_agent.check_agent_exists())
+    await policy_agent.check_agent_exists()
     print("\tℹ️", f"{policy_agent.name} initialized")
 
     research_agent = A2AAgent(
         url=f"http://{host}:{research_agent_port}", memory=UnconstrainedMemory()
     )
-    asyncio.run(research_agent.check_agent_exists())
+    await research_agent.check_agent_exists()
     print("\tℹ️", f"{research_agent.name} initialized")
 
     provider_agent = A2AAgent(
         url=f"http://{host}:{provider_agent_port}", memory=UnconstrainedMemory()
     )
-    asyncio.run(provider_agent.check_agent_exists())
+    await provider_agent.check_agent_exists()
     print("\tℹ️", f"{provider_agent.name} initialized")
 
     healthcare_agent = RequirementAgent(
@@ -128,15 +127,13 @@ def main() -> None:
 
     print("\tℹ️", f"{healthcare_agent.meta.name} initialized")
 
-    # Register the agent with the A2A server and run the HTTP server
-    # we use LRU memory manager to keep limited amount of sessions in the memory
-    A2AServer(
-        config=A2AServerConfig(
-            port=healthcare_agent_port, protocol="jsonrpc", host=host
-        ),
-        memory_manager=LRUMemoryManager(maxsize=100),
-    ).register(healthcare_agent, send_trajectory=True).serve()
+    response = await healthcare_agent.run(
+        "I'm based in Austin, TX. How do I get mental health therapy near me and what does my insurance cover?"
+    ).middleware(ConciseGlobalTrajectoryMiddleware())
+
+    print("\n=== FINAL ANSWER ===\n")
+    print(response.last_message.text)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
