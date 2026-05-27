@@ -5,7 +5,6 @@ import litellm
 
 from helpers import setup_env
 
-
 class PolicyAgent:
     def __init__(self) -> None:
         setup_env()
@@ -14,10 +13,7 @@ class PolicyAgent:
 
     def answer_query(self, prompt: str) -> str:
         response = litellm.completion(
-            model="gemini/gemini-3.1-flash-lite-preview",
-            # For Vertex AI
-            # model="vertex_ai/gemini-3.1-flash-lite-preview",
-            reasoning_effort="minimal",
+            model="vertex_ai/gemini-2.5-flash",
             max_tokens=1000,
             messages=[
                 {
@@ -40,3 +36,4 @@ class PolicyAgent:
         )
 
         return response.choices[0].message.content.replace("$", r"\$")
+

@@ -37,14 +37,12 @@ def main() -> None:
     )
     agent: CompiledStateGraph = create_agent(
         model=ChatLiteLLM(
-            model="gemini/gemini-3.1-flash-lite-preview",
-            # For Vertex AI:
-            # model="vertex_ai/gemini-3.1-flash-lite-preview",
+            model="vertex_ai/gemini-2.5-flash",
             max_tokens=1000,
         ),
         tools=asyncio.run(mcp_client.get_tools()),
         name="HealthcareProviderAgent",
-        system_prompt="Find and list healthcare providers using the find_healthcare_providers MCP Tool. Only provide information that is given to you from the find_healthcare_providers tool results.",
+        system_prompt="You are a healthcare provider agent that finds and lists healthcare providers by location and specialty. Use the find_healthcare_providers MCP tool to look them up. Only provide information returned by the find_healthcare_providers tool results.",
     )
 
     agent_card = AgentCard(
